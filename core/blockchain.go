@@ -332,6 +332,11 @@ func (bc *BlockChain) FastSyncCommitHead(hash common.Hash) error {
 	return nil
 }
 
+// Returns low level database reader.
+func (bc *BlockChain) DatabaseReader() DatabaseReader {
+	return bc.db
+}
+
 // GasLimit returns the gas limit of the current HEAD block.
 func (bc *BlockChain) GasLimit() uint64 {
 	return bc.CurrentBlock().GasLimit()

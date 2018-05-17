@@ -116,6 +116,7 @@ const (
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
+	DatabaseReader() DatabaseReader
 	CurrentBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
 	StateAt(root common.Hash) (*state.StateDB, error)
@@ -785,6 +786,9 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
+	//We should precalculate the cost before using it.
+	SetExpectedGasPrice(pool.chain.DatabaseReader(), tx)
+
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
@@ -814,6 +818,10 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 	errs := make([]error, len(txs))
 
 	for i, tx := range txs {
+
+		//We should precalculate the cost before using it.
+		SetExpectedGasPrice(pool.chain.DatabaseReader(), tx)
+
 		var replace bool
 		if replace, errs[i] = pool.add(tx, local); errs[i] == nil {
 			if !replace {

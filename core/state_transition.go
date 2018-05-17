@@ -58,6 +58,9 @@ type StateTransition struct {
 	data       []byte
 	state      vm.StateDB
 	evm        *vm.EVM
+
+	gasPriceManager *GasPriceManager
+	gasPriceUsed    *big.Int
 }
 
 // Message represents a message sent to a contract.
@@ -109,7 +112,7 @@ func IntrinsicGas(data []byte, contractCreation, homestead bool) (uint64, error)
 }
 
 // NewStateTransition initialises and returns a new state transition object.
-func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
+func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool, databaseReader DatabaseReader) *StateTransition {
 	return &StateTransition{
 		gp:       gp,
 		evm:      evm,
@@ -118,6 +121,9 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 		value:    msg.Value(),
 		data:     msg.Data(),
 		state:    evm.StateDB,
+
+		gasPriceManager: NewGasPriceManager(databaseReader),
+		gasPriceUsed:    msg.GasPrice(),
 	}
 }
 
@@ -128,8 +134,8 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).TransitionDb()
+func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, databaseReader DatabaseReader) ([]byte, uint64, *big.Int, bool, error) {
+	return NewStateTransition(evm, msg, gp, databaseReader).TransitionDb()
 }
 
 // to returns the recipient of the message.
@@ -150,7 +156,14 @@ func (st *StateTransition) useGas(amount uint64) error {
 }
 
 func (st *StateTransition) buyGas() error {
-	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
+
+	//Calculates actualGasPrice based on gas limit (planned gas to use).
+	to := st.to()
+	st.gasPriceUsed, _ = st.gasPriceManager.GetActualGasPrice(&to, st.msg.Gas(), st.gasPrice)
+
+	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()),
+		//Uses actual gas price to account fixed price value limit.
+		st.gasPriceUsed)
 	if st.state.GetBalance(st.msg.From()).Cmp(mgval) < 0 {
 		return errInsufficientBalanceForGas
 	}
@@ -180,7 +193,7 @@ func (st *StateTransition) preCheck() error {
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
+func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, usedGasPrice *big.Int, failed bool, err error) {
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -192,10 +205,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	// Pay intrinsic gas
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, nil, false, err
 	}
 	if err = st.useGas(gas); err != nil {
-		return nil, 0, false, err
+		return nil, 0, nil, false, err
 	}
 
 	var (
@@ -218,13 +231,15 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		// sufficient balance to make the transfer happen. The first
 		// balance transfer may never fail.
 		if vmerr == vm.ErrInsufficientBalance {
-			return nil, 0, false, vmerr
+			return nil, 0, nil, false, vmerr
 		}
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()),
+		//Uses actual gas price to account fixed price value limit.
+		st.gasPriceUsed))
 
-	return ret, st.gasUsed(), vmerr != nil, err
+	return ret, st.gasUsed(), st.gasPriceUsed, vmerr != nil, err
 }
 
 func (st *StateTransition) refundGas() {
@@ -236,7 +251,9 @@ func (st *StateTransition) refundGas() {
 	st.gas += refund
 
 	// Return ETH for remaining gas, exchanged at the original rate.
-	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
+	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas),
+		//Uses actual gas price to account fixed price value limit.
+		st.gasPriceUsed)
 	st.state.AddBalance(st.msg.From(), remaining)
 
 	// Also return remaining gas to the block gas counter so it is

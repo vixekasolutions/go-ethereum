@@ -243,8 +243,10 @@ func (tx *Transaction) GetGasPrice() *BigInt { return &BigInt{tx.tx.GasPrice()} 
 func (tx *Transaction) GetValue() *BigInt    { return &BigInt{tx.tx.Value()} }
 func (tx *Transaction) GetNonce() int64      { return int64(tx.tx.Nonce()) }
 
-func (tx *Transaction) GetHash() *Hash   { return &Hash{tx.tx.Hash()} }
-func (tx *Transaction) GetCost() *BigInt { return &BigInt{tx.tx.Cost()} }
+func (tx *Transaction) GetHash() *Hash { return &Hash{tx.tx.Hash()} }
+
+// Commented to simplify implementation as cost at first should be calculated.
+// func (tx *Transaction) GetCost() *BigInt { return &BigInt{tx.tx.Cost()} }
 
 // Deprecated: GetSigHash cannot know which signer to use.
 func (tx *Transaction) GetSigHash() *Hash { return &Hash{types.HomesteadSigner{}.Hash(tx.tx)} }

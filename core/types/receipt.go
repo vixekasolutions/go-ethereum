@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/big"
 	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -55,6 +56,9 @@ type Receipt struct {
 	TxHash          common.Hash    `json:"transactionHash" gencodec:"required"`
 	ContractAddress common.Address `json:"contractAddress"`
 	GasUsed         uint64         `json:"gasUsed" gencodec:"required"`
+
+	// Gas price applied in transaction.
+	PriceUsed *big.Int `json:"gasPriceUsed" gencodec:"required"`
 }
 
 type receiptMarshaling struct {

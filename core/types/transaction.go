@@ -51,6 +51,8 @@ type Transaction struct {
 	hash atomic.Value
 	size atomic.Value
 	from atomic.Value
+
+	expectedGasPrice *big.Int
 }
 
 type txdata struct {
@@ -111,7 +113,7 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 		d.Price.Set(gasPrice)
 	}
 
-	return &Transaction{data: d}
+	return &Transaction{data: d, expectedGasPrice: nil}
 }
 
 // ChainId returns which chain id this transaction was signed for (if at all)
@@ -184,6 +186,12 @@ func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amo
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
 
+func (tx *Transaction) ExpectedGasPrice() *big.Int { return tx.expectedGasPrice }
+
+func (tx *Transaction) SetExpectedGasPrice(expectedGasPrice *big.Int) {
+	tx.expectedGasPrice = expectedGasPrice
+}
+
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
 func (tx *Transaction) To() *common.Address {
@@ -252,7 +260,13 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 
 // Cost returns amount + gasprice * gaslimit.
 func (tx *Transaction) Cost() *big.Int {
-	total := new(big.Int).Mul(tx.data.Price, new(big.Int).SetUint64(tx.data.GasLimit))
+
+	// Expected Gas Price should be provided.
+	if tx.expectedGasPrice == nil {
+		return nil
+	}
+
+	total := new(big.Int).Mul(tx.expectedGasPrice, new(big.Int).SetUint64(tx.data.GasLimit))
 	total.Add(total, tx.data.Amount)
 	return total
 }
