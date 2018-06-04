@@ -25,9 +25,14 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+type ContractChecker interface {
+	GetCodeSize(addr common.Address) int
+}
+
 type GasPriceManager struct {
-	config         GasPriceManagerConfig
-	databaseReader DatabaseReader
+	config          GasPriceManagerConfig
+	databaseReader  DatabaseReader
+	contractChecker ContractChecker
 }
 
 // GasPriceManagerConfig are the configuration parameters of the gas price manager.
@@ -48,20 +53,21 @@ var DefaultGasPriceManagerConfig = GasPriceManagerConfig{
 }
 
 // Calculates the expected fixed price based on the number of transactions in the database.
-func SetExpectedGasPrice(databaseReader DatabaseReader, tx *types.Transaction) {
-	gasPriceManager := NewGasPriceManager(databaseReader)
+func SetExpectedGasPrice(databaseReader DatabaseReader, contractChecker ContractChecker, tx *types.Transaction) {
+	gasPriceManager := NewGasPriceManager(databaseReader, contractChecker)
 	actualGasPrice, _ := gasPriceManager.GetActualGasPrice(tx.To(), tx.Gas(), tx.GasPrice())
 	tx.SetExpectedGasPrice(actualGasPrice)
 }
 
-func NewGasPriceManager(databaseReader DatabaseReader) *GasPriceManager {
+func NewGasPriceManager(databaseReader DatabaseReader, contractChecker ContractChecker) *GasPriceManager {
 
 	config := DefaultGasPriceManagerConfig
 
 	// Create the gas price manager with its initial settings
 	gpm := &GasPriceManager{
-		config:         config,
-		databaseReader: databaseReader,
+		config:          config,
+		databaseReader:  databaseReader,
+		contractChecker: contractChecker,
 	}
 
 	return gpm
@@ -84,6 +90,13 @@ func (gpm *GasPriceManager) isFixedPriceShouldBeApplied(to *common.Address, txGa
 	// If the transaction gas is over the fixed price limit, do not continue. As the fixed price
 	// cannot be applied.
 	if txGasUsed > gpm.config.FixedPriceGasLimit {
+		return false
+	}
+
+	// Code size 0 means there is no code for the address, this means the address is not a
+	// contract. But we allow to apply the Fixed Price just for contract transactions.
+	codeSize := gpm.contractChecker.GetCodeSize(*to)
+	if codeSize == 0 {
 		return false
 	}
 

@@ -122,7 +122,7 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool, databaseReader Da
 		data:     msg.Data(),
 		state:    evm.StateDB,
 
-		gasPriceManager: NewGasPriceManager(databaseReader),
+		gasPriceManager: NewGasPriceManager(databaseReader, evm.StateDB),
 		gasPriceUsed:    msg.GasPrice(),
 	}
 }

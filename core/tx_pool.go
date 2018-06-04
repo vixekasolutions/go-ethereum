@@ -787,7 +787,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	defer pool.mu.Unlock()
 
 	//We should precalculate the cost before using it.
-	SetExpectedGasPrice(pool.chain.DatabaseReader(), tx)
+	SetExpectedGasPrice(pool.chain.DatabaseReader(), pool.currentState, tx)
 
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
@@ -820,7 +820,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 	for i, tx := range txs {
 
 		//We should precalculate the cost before using it.
-		SetExpectedGasPrice(pool.chain.DatabaseReader(), tx)
+		SetExpectedGasPrice(pool.chain.DatabaseReader(), pool.currentState, tx)
 
 		var replace bool
 		if replace, errs[i] = pool.add(tx, local); errs[i] == nil {

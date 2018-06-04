@@ -432,7 +432,7 @@ func (self *TxPool) Add(ctx context.Context, tx *types.Transaction) error {
 	}
 
 	//We should precalculate the cost before using it.
-	core.SetExpectedGasPrice(self.chainDb, tx)
+	core.SetExpectedGasPrice(self.chainDb, self.currentState(ctx), tx)
 
 	if err := self.add(ctx, tx); err != nil {
 		return err
@@ -454,7 +454,7 @@ func (self *TxPool) AddBatch(ctx context.Context, txs []*types.Transaction) {
 	for _, tx := range txs {
 
 		//We should precalculate the cost before using it.
-		core.SetExpectedGasPrice(self.chainDb, tx)
+		core.SetExpectedGasPrice(self.chainDb, self.currentState(ctx), tx)
 
 		if err := self.add(ctx, tx); err == nil {
 			sendTx = append(sendTx, tx)
