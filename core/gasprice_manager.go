@@ -48,7 +48,7 @@ type GasPriceManagerConfig struct {
 // pool.
 var DefaultGasPriceManagerConfig = GasPriceManagerConfig{
 	FixedPrice:                        0,
-	FixedPriceGasLimit:                100000,
+	FixedPriceGasLimit:                200000,
 	FixedPriceTxCountPerContractLimit: 10000,
 }
 
